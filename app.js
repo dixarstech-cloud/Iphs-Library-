@@ -109,8 +109,12 @@ function load() {
   catch { storageOK = false; return defaults(); }
 }
 let db = load();
-function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { storageOK = false; } }
+let onSaved = () => { };
+function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { storageOK = false; } onSaved(); }
 const session = { apiKey: "", chat: [], quiz: null };
+/* Gemini for teachers. After you deploy gemini-proxy.js, put its address here so teachers only type their access code. */
+const DEFAULT_PROXY_URL = "";
+const GEMINI_DIRECT_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", GEMINI_MODEL = "gemini-2.5-flash";
 
 /* ---------- theme ---------- */
 const themeChoice = () => db.settings.theme || "light";
@@ -404,7 +408,7 @@ function viewRegister() {
   show(`<div class="register">
     <div class="register-art" role="img" aria-label="Books, a graduation cap and an apple on a desk"><div class="register-art-text"><h2>Your reading, remembered.</h2><p>Your profile keeps your place in every book, your bookmarks and your quiz scores.</p></div></div>
     <form class="register-form" data-form="register" novalidate>
-      <h1>${edit ? "Edit your profile" : "Create your profile"}</h1><p class="muted">It is saved only in this browser. There is no password and nothing is sent anywhere.</p>
+      <h1>${edit ? "Edit your profile" : "Create your profile"}</h1><p class="muted">It is saved on this device. Sign in with an account if you also want it saved online.</p>
       <div class="field"><label for="f-name">Full name</label><input id="f-name" name="name" value="${esc(p.full_name || "")}" autocomplete="name" placeholder="For example, Chikondi Banda" required></div>
       <div class="field"><label>Role</label>${choice("role", ["Student", "Teacher"], p.role)}</div>
       <div class="field"><label>Sector</label>${choice("sector", ["Private", "Public"], p.sector)}</div>
@@ -415,18 +419,30 @@ function viewRegister() {
     </form></div>`, { title: edit ? "Edit profile" : "Create profile", section: "", cls: "wide" });
 }
 
+function aiSettingsHtml() {
+  const s = db.settings, online = s.mode === "Online";
+  if (!isTeacher()) return `<section class="panel"><div class="setting nopad"><div><h3>Ask Library AI</h3><p class="muted">Answers come from the books on this device, with no internet needed. Gemini AI is available to teachers.</p></div></div></section>`;
+  if (!canUseAi()) return `<section class="panel"><div class="setting nopad"><div><h3>Ask Library AI with Gemini</h3><p class="muted">${cloud.session ? "Your account is waiting for the school to approve it for Gemini. Until then Ask AI answers from the books on this device." : "Sign in with your teacher account to use Gemini. Until then Ask AI answers from the books on this device."}</p></div><a class="btn outline" href="#/account">${cloud.session ? "My account" : "Sign in"}</a></div></section>`;
+  const via = aiVia(), proxy = via === "proxy";
+  return `<section class="panel"><div class="setting nopad"><div><h3>Ask Library AI with Gemini</h3><p class="muted">Offline mode finds answers in your books. Online mode sends your question and matching book passages to Google Gemini. Only teachers can turn this on.</p></div>
+      <div class="seg" role="group" aria-label="Assistant mode"><button class="${!online ? "on" : ""}" data-act="mode" data-v="Offline" aria-pressed="${!online}">Offline</button><button class="${online ? "on" : ""}" data-act="mode" data-v="Online" aria-pressed="${online}">Online</button></div></div>
+    <div class="ai-form ${online ? "" : "dim"}"><p class="field-label">Connect with</p>
+      <div class="seg" role="group" aria-label="Connection"><button class="${proxy ? "on" : ""}" data-act="ai-via" data-v="proxy" aria-pressed="${proxy}">School proxy</button><button class="${!proxy ? "on" : ""}" data-act="ai-via" data-v="direct" aria-pressed="${!proxy}">My Gemini key</button></div>
+      <p class="muted small-note">${proxy ? "Recommended. The Gemini key stays on the school's proxy. You only need the teacher access code." : "Uses your own key from Google AI Studio. The key is kept for this visit only. Do not use this on a shared computer."}</p>
+      <form data-form="ai"><div class="field"><label for="ai-url">${proxy ? "Proxy address" : "Gemini address"}</label><input id="ai-url" name="url" value="${esc(aiUrl())}" ${proxy ? 'placeholder="https://iphs-gemini-proxy.your-name.workers.dev"' : ""} autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="ai-model">Model</label><input id="ai-model" name="model" value="${esc(aiModel())}" autocapitalize="off" spellcheck="false"></div>
+        <div class="field"><label for="ai-key">${proxy ? "Teacher access code" : "Gemini API key"}</label><input id="ai-key" name="key" type="password" autocomplete="off" value="${esc(aiKey())}" placeholder="${proxy ? "Given to you by the school" : "Kept for this visit only"}"></div>
+        ${proxy ? `<label class="chk"><input type="checkbox" name="remember" ${s.proxyCode ? "checked" : ""}><span>Remember the access code on this device</span></label>` : ""}
+        <div class="btn-row"><button class="btn">Save</button><button class="btn outline" type="button" data-act="ai-test">Test connection</button></div><p class="muted small-note" id="aiTest" role="status"></p></form></div></section>`;
+}
 function viewSettings() {
   const s = db.settings, t = currentTheme(), online = s.mode === "Online";
   show(`<header class="page-head"><h1>Settings</h1><p class="lead">Make the library comfortable to use.</p></header>
     ${storageOK ? "" : `<div class="notice warn">This browser is blocking saved data, so your progress will be lost when you close the page. Try opening the file in a normal (not private) browser window.</div>`}
     <section class="panel setting"><div><h3>Theme</h3><p class="muted">Dark theme is easier on the eyes in low light.</p></div>
       <div class="seg" role="group" aria-label="Theme">${[["light", "Light", "sun"], ["dark", "Dark", "moon"], ["auto", "Auto", "gear"]].map(([v, l, ic]) => `<button class="${themeChoice() === v ? "on" : ""}" data-act="theme" data-v="${v}" aria-pressed="${themeChoice() === v}">${icon(ic)}${l}</button>`).join("")}</div></section>
-    <section class="panel"><div class="setting nopad"><div><h3>Ask Library AI</h3><p class="muted">Offline mode finds answers in your books. Online mode sends your question and matching book passages to an AI service you choose.</p></div>
-      <div class="seg" role="group" aria-label="Assistant mode"><button class="${!online ? "on" : ""}" data-act="mode" data-v="Offline" aria-pressed="${!online}">Offline</button><button class="${online ? "on" : ""}" data-act="mode" data-v="Online" aria-pressed="${online}">Online</button></div></div>
-      <form data-form="ai" class="ai-form ${online ? "" : "dim"}"><div class="field"><label for="ai-url">Chat endpoint URL</label><input id="ai-url" name="url" value="${esc(s.apiUrl)}" placeholder="https://your-provider.example/v1/chat/completions"></div>
-        <div class="field"><label for="ai-model">Model name</label><input id="ai-model" name="model" value="${esc(s.apiModel)}" placeholder="Model name"></div>
-        <div class="field"><label for="ai-key">API key for this visit</label><input id="ai-key" name="key" type="password" autocomplete="off" value="${esc(session.apiKey)}" placeholder="Not saved. Enter it again next time."></div>
-        <div class="btn-row"><button class="btn">Save AI settings</button></div></form></section>
+    ${cloudPanel()}
+    ${aiSettingsHtml()}
     <section class="panel" id="installSlot"></section>
     <section class="panel setting"><div><h3>About</h3><p class="muted">IPHS School Library, developed by Dixars. <a href="#/about">About</a>, <a href="#/support">support</a>, <a href="#/license">licence</a> and <a href="#/privacy">privacy</a>.</p></div></section>
     <section class="panel setting"><div><h3>Your data</h3><p class="muted">Progress, bookmarks and scores are saved in this browser on this device.</p></div><a class="btn outline" href="#/profile">View profile</a></section>`, { title: "Settings", section: "settings" });
@@ -463,6 +479,11 @@ function passages(question) {
   return out;
 }
 const NO_ANSWER = "I could not find that answer in the books saved in this library. Try different words, or open a subject and book first.";
+const aiVia = () => db.settings.aiVia === "direct" ? "direct" : "proxy";
+const aiUrl = () => db.settings.apiUrl || (aiVia() === "proxy" ? DEFAULT_PROXY_URL : GEMINI_DIRECT_URL);
+const aiModel = () => db.settings.apiModel || GEMINI_MODEL;
+const aiKey = () => session.apiKey || (aiVia() === "proxy" ? db.settings.proxyCode || "" : "");
+const aiReady = () => isTeacher() && canUseAi() && db.settings.mode === "Online" && !!(aiKey() && aiUrl());
 function offlineAnswer(q) {
   const m = passages(q); if (!m.length) return { answer: NO_ANSWER, source: "", mode: "offline" };
   const source = m[0].title; return { answer: m.filter(x => x.title === source).map(x => x.text).join(" "), source, mode: "offline" };
@@ -471,9 +492,9 @@ async function onlineAnswer(q) {
   const s = db.settings, m = passages(q), context = m.map(x => `${x.title}: ${x.text}`).join("\n");
   const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
   try {
-    const r = await fetch(s.apiUrl, { method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${session.apiKey}` },
-      body: JSON.stringify({ model: s.apiModel, messages: [{ role: "system", content: "Answer only from the supplied school-library excerpts. Use clear, student-friendly language. If the excerpts do not answer the question, say so." }, { role: "user", content: `Question: ${q}\n\nLibrary excerpts:\n${context}` }] }) });
-    if (!r.ok) throw new Error(`The AI service replied with HTTP ${r.status}`);
+    const r = await fetch(aiUrl(), { method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${aiKey()}` },
+      body: JSON.stringify({ model: aiModel(), messages: [{ role: "system", content: "Answer only from the supplied school-library excerpts. Use clear, student-friendly language. If the excerpts do not answer the question, say so." }, { role: "user", content: `Question: ${q}\n\nLibrary excerpts:\n${context}` }] }) });
+    if (!r.ok) { const er = await r.json().catch(() => null); throw new Error((er && er.error && er.error.message) || `The AI service replied with HTTP ${r.status}`); }
     const data = await r.json(); return { answer: data.choices[0].message.content, source: m[0]?.title || "", mode: "online" };
   } catch (e) {
     const o = offlineAnswer(q); return { ...o, mode: "fallback", note: e.name === "AbortError" ? "The AI service took too long to reply." : "Could not reach the AI service (" + e.message + ")." };
@@ -484,21 +505,35 @@ function chatHtml() {
   return session.chat.map(m => m.role === "user" ? `<div class="msg me"><p>${esc(m.text)}</p></div>` : `<div class="msg ai ${m.pending ? "pending" : ""}"><p>${esc(m.text)}</p>${m.source ? `<span class="src">Source: ${esc(m.source)}</span>` : ""}${m.note ? `<span class="note">${esc(m.note)} Showing the offline answer instead.</span>` : ""}</div>`).join("");
 }
 function viewAsk() {
-  const online = db.settings.mode === "Online", ready = online && session.apiKey && db.settings.apiUrl && db.settings.apiModel;
+  const online = isTeacher() && db.settings.mode === "Online", ready = aiReady();
   const sug = reviewQuestions();
   show(`<header class="page-head"><h1>Ask Library AI</h1><p class="lead">Questions are answered from the books in your library.</p></header>
     <section class="chat panel"><div class="chat-log" id="chatLog" aria-live="polite">${chatHtml()}</div>
       ${sug.length && !session.chat.length ? `<div class="suggest"><span class="muted small">Try asking</span>${sug.map(x => `<button class="chip btn-chip" type="button" data-act="suggest" data-q="${esc(x)}">${esc(x)}</button>`).join("")}</div>` : ""}
       <form class="chat-form" data-form="ask"><label class="sr" for="question">Your question</label><textarea id="question" rows="2" placeholder="For example: What is personal hygiene?" required></textarea><button class="btn" id="askBtn">${icon("send")}Ask</button></form>
-      <p class="muted small chat-mode">${ready ? "Online AI is on. Your question and matching book passages are sent to your chosen service." : online ? 'Online mode is selected but not set up, so answers come from the books. <a href="#/settings">Open settings</a>' : "Offline mode. Answers come from the books on this device."}</p></section>`, { title: "Ask Library AI", section: "ask" });
+      <p class="muted small chat-mode">${ready ? "Gemini is on. Your question and matching book passages are sent to Google Gemini." : online ? 'Online mode is selected but not set up, so answers come from the books. <a href="#/settings">Open settings</a>' : "Offline mode. Answers come from the books on this device."}</p></section>`, { title: "Ask Library AI", section: "ask" });
   const log = $("#chatLog"); log.scrollTop = log.scrollHeight;
+}
+async function testAi(btn) {
+  const f = btn.closest("form"), out = $("#aiTest"), fd = new FormData(f);
+  const url = String(fd.get("url") || "").trim(), model = String(fd.get("model") || "").trim() || GEMINI_MODEL, key = String(fd.get("key") || "").trim();
+  if (!url) { out.textContent = "Enter the address first."; return; } if (!key) { out.textContent = aiVia() === "proxy" ? "Enter the teacher access code first." : "Enter your Gemini API key first."; return; }
+  out.textContent = "Testing..."; btn.disabled = true;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(url, { method: "POST", signal: ctl.signal, headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` }, body: JSON.stringify({ model, max_tokens: 20, messages: [{ role: "user", content: "Reply with the single word: ready" }] }) });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) out.textContent = (d && d.error && d.error.message) || `The service replied with HTTP ${r.status}.`;
+    else out.textContent = "Connected. Gemini replied: " + String(d.choices[0].message.content).trim().slice(0, 60);
+  } catch (e) { out.textContent = e.name === "AbortError" ? "No reply after 20 seconds." : "Could not reach the address. Check it and your internet."; }
+  finally { clearTimeout(timer); btn.disabled = false; }
 }
 async function ask(q) {
   q = q.trim(); if (!q) return toast("Type a question first.");
   const log = $("#chatLog"), btn = $("#askBtn");
   session.chat.push({ role: "user", text: q }); session.chat.push({ role: "ai", text: "Searching your school books", pending: true });
   log.innerHTML = chatHtml(); log.scrollTop = log.scrollHeight; $(".suggest")?.remove(); if (btn) btn.disabled = true;
-  const s = db.settings, useOnline = s.mode === "Online" && session.apiKey && s.apiUrl && s.apiModel;
+  const useOnline = aiReady();
   const r = useOnline ? await onlineAnswer(q) : offlineAnswer(q);
   session.chat.pop(); session.chat.push({ role: "ai", text: r.answer, source: r.source, note: r.note });
   if ($("#chatLog")) { $("#chatLog").innerHTML = chatHtml(); $("#chatLog").scrollTop = $("#chatLog").scrollHeight; }
@@ -1389,6 +1424,7 @@ function viewLicense() {
 function viewPrivacy() {
   ishow("privacy", "Privacy", `<header class="page-head"><h1>Privacy and data protection</h1><p class="lead">Your information stays on your device unless you choose to share it.</p></header>
   <div class="panel"><h3>What is stored</h3><p>On this device only: your profile (name, role, age, gender), bookmarks, reading progress and quiz scores. Teachers also store classes, learner names, gender, admission numbers, guardian phone numbers and marks. This data lives in this browser. The app has no account system and no server that receives it.</p></div>
+  <div class="panel"><h3>Online account (optional)</h3><p>If you create an account, your email, name, role and the same data as above (profile, progress, bookmarks and, for teachers, classes and learner results) are stored in a private database provided by Supabase. Each account can read only its own rows. Passwords are never visible to the app or to the school. Sign out and clear this device on shared phones, and use <strong>Delete my online data</strong> on the account page to remove what is stored online. Without an account, nothing is sent.</p></div>
   <div class="panel"><h3>What leaves your device</h3><ul class="ticks"><li><strong>Dictionary:</strong> when online, the word you look up is sent to dictionaryapi.dev.</li><li><strong>Fonts:</strong> your browser may fetch fonts from Google Fonts when you are online.</li><li><strong>Online AI mode (optional):</strong> if you turn it on and enter an AI service address, your question and the book excerpts used to answer it are sent to that service. Offline mode sends nothing.</li><li><strong>Support emails:</strong> only what you choose to send from your own email app.</li><li><strong>Backups and PDFs:</strong> files you download are yours. They contain learner names and marks, so keep them safe.</li></ul></div>
   <div class="panel"><h3>Learners' information</h3><p>Teachers who record learners' details are responsible for them. Collect only what you need, keep the device locked, share reports only with the learner, parents or guardians and school staff who should see them, and follow your school's policy and the data protection rules that apply where you work. Shared phones and computers: log out of the device or remove the data when you finish.</p></div>
   <div class="panel"><h3>Your choices</h3><ul class="ticks"><li>Remove one learner or a whole class from the Results pages at any time.</li><li>Delete everything stored by the app with <strong>Delete my data</strong> in <a href="#/settings">Settings</a>. Clearing the browser's site data does the same.</li><li>Download a backup before deleting if you want to keep your results.</li></ul></div>
@@ -1408,6 +1444,196 @@ document.addEventListener("submit", e => {
 });
 document.addEventListener("click", e => { if (e.target.closest('[data-r="copy-email"]')) { (navigator.clipboard ? navigator.clipboard.writeText(SUPPORT_EMAIL) : Promise.reject()).then(() => toast("Email address copied"), () => toast(SUPPORT_EMAIL)); } });
 
+/* ---------- online account and sync (Supabase) ---------- */
+const SUPABASE_URL = "https://blphzrlezmyudpdtueja.supabase.co";
+const SUPABASE_KEY = "sb_publishable_AsX9QMi7WiX11YMC0ngqyA_Qx-9YiPC";   // publishable key: safe to ship, the database rules protect the data
+const CLOUD_ON = !!(SUPABASE_URL && SUPABASE_KEY);
+const CKEY = "iphs.cloud.v1";
+const cloud = Object.assign({ session: null, isTeacher: false, remoteTs: 0, dirty: false, lastSync: null }, (() => { try { return JSON.parse(localStorage.getItem(CKEY)) || {}; } catch { return {}; } })());
+cloud.status = ""; let acctTab = "signin", applying = false, syncing = false, syncTimer = null;
+const csave = () => { try { const { status, ...keep } = cloud; localStorage.setItem(CKEY, JSON.stringify(keep)); } catch { } };
+
+function cloudError(j, status) {
+  const m = String((j && (j.msg || j.error_description || j.message || j.error)) || "");
+  if (/invalid login/i.test(m)) return "The email or password is wrong.";
+  if (/already (been )?registered/i.test(m)) return "That email already has an account. Sign in instead.";
+  if (/password/i.test(m) && /(short|least|weak|characters)/i.test(m)) return "Use a password of at least 6 characters.";
+  if (/(valid|invalid).*email|email.*(valid|invalid)/i.test(m)) return "Enter a valid email address.";
+  if (/not confirmed/i.test(m)) return "Confirm your email first. Check your inbox.";
+  if (/rate limit|too many|only request this after/i.test(m)) return "Too many tries. Wait a minute and try again.";
+  if (/expired|invalid.*(token|link)/i.test(m)) return "That link has expired. Ask for a new one.";
+  return m || `The server replied with HTTP ${status}.`;
+}
+async function sb(path, { method = "GET", body, token, headers = {} } = {}) {
+  const h = { apikey: SUPABASE_KEY, "Content-Type": "application/json", ...headers };
+  if (token) h.Authorization = `Bearer ${token}`;
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 20000);
+  try {
+    const r = await fetch(SUPABASE_URL + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body), signal: ctl.signal });
+    const text = await r.text(); let j = null; try { j = text ? JSON.parse(text) : null; } catch { }
+    if (!r.ok) { const e = new Error(cloudError(j, r.status)); e.status = r.status; throw e; }
+    return j;
+  } catch (e) {
+    if (e.status) throw e;
+    const n = new Error(e.name === "AbortError" ? "The server took too long to reply." : "No internet connection."); n.offline = true; throw n;
+  } finally { clearTimeout(timer); }
+}
+function setSession(s) {
+  cloud.session = s ? { access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || Math.floor(Date.now() / 1000) + (s.expires_in || 3600), user: { id: s.user.id, email: s.user.email, name: (s.user.user_metadata || {}).full_name || "" } } : null;
+  csave();
+}
+function signedOut(msg) { cloud.session = null; cloud.isTeacher = false; cloud.remoteTs = 0; cloud.dirty = false; cloud.lastSync = null; cloud.status = ""; clearTimeout(syncTimer); csave(); if (msg) toast(msg); }
+async function cloudToken() {
+  const s = cloud.session; if (!s) throw new Error("Not signed in.");
+  if (s.expires_at - 60 < Date.now() / 1000) {
+    try { setSession(await sb("/auth/v1/token?grant_type=refresh_token", { method: "POST", body: { refresh_token: s.refresh_token } })); }
+    catch (e) { if (e.status === 400 || e.status === 401) { signedOut("Your login expired. Sign in again to keep syncing."); if (location.hash.startsWith("#/account")) route(); } throw e; }
+  }
+  return cloud.session.access_token;
+}
+async function cloudSignUp(email, password, name) {
+  const r = await sb("/auth/v1/signup", { method: "POST", body: { email, password, data: { full_name: name } } });
+  if (r && r.access_token) { setSession(r); return "in"; } return "confirm";
+}
+async function cloudSignIn(email, password) { setSession(await sb("/auth/v1/token?grant_type=password", { method: "POST", body: { email, password } })); }
+async function cloudSignOut() { try { const t = cloud.session && cloud.session.access_token; if (t) await sb("/auth/v1/logout", { method: "POST", token: t }); } catch { } signedOut(); }
+async function cloudRecover(email) { await sb(`/auth/v1/recover?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`, { method: "POST", body: { email } }); }
+
+/* what is synced: everything except this device's settings (theme, AI address, access codes) */
+const syncData = () => { const { settings, ...rest } = db; return JSON.parse(JSON.stringify(rest)); };
+const hasData = d => !!(d.profile || (d.classes && d.classes.length) || ["bookmarks", "favorites", "reading", "done"].some(k => d[k] && Object.keys(d[k]).length) || (d.scores && d.scores.length));
+function mergeState(local, remote) {
+  const byId = (a, b, f) => { const m = new Map(); (b || []).forEach(x => m.set(x.id, x)); (a || []).forEach(x => m.set(x.id, f ? f(m.get(x.id), x) : x)); return [...m.values()]; };
+  const m = { ...defaults(), ...remote, ...local };
+  m.profile = local.profile || remote.profile || null;
+  ["bookmarks", "favorites", "reading", "done"].forEach(k => { m[k] = { ...(remote[k] || {}), ...(local[k] || {}) }; });
+  const seen = new Set(); m.scores = [...(local.scores || []), ...(remote.scores || [])].filter(s => { const k = JSON.stringify(s); return seen.has(k) ? false : (seen.add(k), true); });
+  m.classes = byId(local.classes, remote.classes, (r, l) => r ? { ...r, ...l, learners: byId(l.learners, r.learners) } : l);
+  m.assessments = byId(local.assessments, remote.assessments, (r, l) => r ? { ...r, ...l, marks: { ...(r.marks || {}), ...(l.marks || {}) } } : l);
+  return m;
+}
+function applyState(data) { applying = true; db = { ...defaults(), ...data, settings: db.settings }; save(); applying = false; navRole = null; }
+async function pullProfile() {
+  const t = await cloudToken(), rows = await sb(`/rest/v1/iphs_profiles?select=full_name,role,is_teacher&id=eq.${cloud.session.user.id}`, { token: t });
+  cloud.isTeacher = !!(rows && rows[0] && rows[0].is_teacher); csave(); return rows && rows[0];
+}
+async function pushProfile() {
+  if (!db.profile) return; const t = await cloudToken();
+  await sb(`/rest/v1/iphs_profiles?id=eq.${cloud.session.user.id}`, { method: "PATCH", token: t, headers: { Prefer: "return=minimal" }, body: { full_name: db.profile.full_name, role: db.profile.role === "Teacher" ? "Teacher" : "Student" } });
+}
+async function syncNow() {
+  if (!CLOUD_ON || !cloud.session || syncing) return;
+  if (!navigator.onLine) { cloud.status = "Waiting for internet"; return paintCloud(); }
+  syncing = true; cloud.status = "Syncing..."; paintCloud(); let changed = false;
+  try {
+    const t = await cloudToken(), id = cloud.session.user.id;
+    const rows = await sb(`/rest/v1/iphs_app_state?select=data,updated_at&user_id=eq.${id}`, { token: t }), row = rows && rows[0], remoteTs = row ? Date.parse(row.updated_at) || 0 : 0;
+    const local = syncData(); let push = false;
+    if (!row) push = hasData(local);
+    else if (remoteTs === cloud.remoteTs) push = cloud.dirty;
+    else if (cloud.dirty || (cloud.remoteTs === 0 && hasData(local))) { applyState(mergeState(local, row.data || {})); push = true; changed = true; }
+    else { applyState(row.data || {}); cloud.remoteTs = remoteTs; changed = true; }
+    if (push) {
+      const now = new Date().toISOString();
+      await sb("/rest/v1/iphs_app_state", { method: "POST", token: t, headers: { Prefer: "resolution=merge-duplicates,return=minimal" }, body: { user_id: id, data: syncData(), updated_at: now } });
+      cloud.remoteTs = Date.parse(now); cloud.dirty = false;
+    }
+    cloud.lastSync = new Date().toISOString(); cloud.status = "Up to date"; csave();
+    await pullProfile().catch(() => { }); if (push) pushProfile().catch(() => { });
+  } catch (e) { cloud.status = e.offline ? "Waiting for internet" : "Could not sync: " + e.message; }
+  finally { syncing = false; paintCloud(); if (changed) route(); }
+}
+onSaved = () => { if (applying || !cloud.session) return; cloud.dirty = true; csave(); clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 4000); };
+addEventListener("online", () => syncNow());
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") syncNow(); });
+
+const canUseAi = () => !CLOUD_ON || cloud.isTeacher;
+const ago = iso => { if (!iso) return "Not yet"; const s = Math.max(1, Math.round((Date.now() - Date.parse(iso)) / 1000)); return s < 60 ? "Just now" : s < 3600 ? Math.round(s / 60) + " minutes ago" : s < 86400 ? Math.round(s / 3600) + " hours ago" : new Date(iso).toLocaleDateString(); };
+function paintCloud() { const s = $("#cloudStatus"); if (s) { s.textContent = cloud.status || ""; const l = $("#cloudLast"); if (l) l.textContent = ago(cloud.lastSync); } }
+
+function cloudPanel() {
+  if (!CLOUD_ON) return "";
+  return cloud.session
+    ? `<section class="panel setting"><div><h3>Online account</h3><p class="muted">Signed in as ${esc(cloud.session.user.email)}. Your progress is saved online.</p></div><a class="btn outline" href="#/account">My account</a></section>`
+    : `<section class="panel setting"><div><h3>Online account</h3><p class="muted">Sign in to keep your progress and results safe and use them on any phone.</p></div><a class="btn" href="#/account">Sign in</a></section>`;
+}
+function viewAccount(sub) {
+  if (!CLOUD_ON) return show(`<div class="empty-state"><h3>Accounts are not set up</h3><p>This copy of the app works on this device only.</p></div>`, { title: "Account" });
+  if (sub === "reset" && cloud.session) return show(`<header class="page-head"><h1>Choose a new password</h1></header><form class="panel narrow" data-cform="newpass" novalidate><div class="field"><label for="c-pass">New password</label><input id="c-pass" name="password" type="password" autocomplete="new-password" minlength="6" required></div><p class="form-error" role="alert" id="cError"></p><button class="btn" type="submit">Save password</button></form>`, { title: "New password", section: "settings" });
+  if (!cloud.session) {
+    const up = acctTab === "signup";
+    return show(`<header class="page-head"><h1>${up ? "Create an account" : "Sign in"}</h1><p class="lead">An account keeps your progress${isTeacher() ? ", classes and results" : ""} safe online, so you can use them on any phone.</p></header>
+      <form class="panel narrow" data-cform="${up ? "signup" : "signin"}" novalidate>
+        <div class="seg" role="group" aria-label="Account"><button type="button" class="${!up ? "on" : ""}" data-act="acct-tab" data-v="signin" aria-pressed="${!up}">Sign in</button><button type="button" class="${up ? "on" : ""}" data-act="acct-tab" data-v="signup" aria-pressed="${up}">Create account</button></div>
+        ${up ? `<div class="field"><label for="c-name">Full name</label><input id="c-name" name="name" autocomplete="name" value="${esc(db.profile ? db.profile.full_name : "")}" required></div>` : ""}
+        <div class="field"><label for="c-email">Email</label><input id="c-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" required></div>
+        <div class="field"><label for="c-pass">Password</label><input id="c-pass" name="password" type="password" autocomplete="${up ? "new-password" : "current-password"}" minlength="6" required></div>
+        <p class="form-error" role="alert" id="cError"></p>
+        <div class="toolbar"><button class="btn" type="submit">${up ? "Create account" : "Sign in"}</button>${up ? "" : `<button class="btn outline" type="button" data-act="acct-forgot">Forgot password</button>`}</div>
+        <p class="muted small-note">${up && db.profile ? "Your progress on this device will be saved to the new account. " : ""}You can also use the app without an account. Then your data stays only on this device. <a href="#/privacy">How your information is handled</a></p></form>`, { title: up ? "Create account" : "Sign in", section: "settings" });
+  }
+  const u = cloud.session.user, p = db.profile;
+  const kind = cloud.isTeacher ? "Verified teacher" : p && p.role === "Teacher" ? "Teacher, waiting for approval" : "Student";
+  show(`<header class="page-head"><h1>My account</h1></header>
+    <section class="panel narrow"><dl class="kv"><div><dt>Email</dt><dd>${esc(u.email)}</dd></div><div><dt>Name</dt><dd>${esc((p && p.full_name) || u.name || "-")}</dd></div><div><dt>Account type</dt><dd>${kind}</dd></div><div><dt>Last saved online</dt><dd id="cloudLast">${ago(cloud.lastSync)}</dd></div><div><dt>Status</dt><dd id="cloudStatus" aria-live="polite">${esc(cloud.status || "")}</dd></div></dl>
+      ${p ? "" : `<div class="notice">You have no profile on this device yet. <a href="#/register">Create your profile</a>.</div>`}
+      ${p && p.role === "Teacher" && !cloud.isTeacher ? `<p class="muted small-note">Results work for every teacher profile. Gemini AI also needs the school to approve your account. Ask the administrator to approve ${esc(u.email)}.</p>` : ""}
+      <div class="toolbar"><button class="btn" data-act="acct-sync">Save now</button><button class="btn outline" data-act="acct-out">Sign out</button></div></section>
+    <section class="panel narrow"><h3>Shared phone?</h3><p class="muted">Sign out and remove your data from this device. It stays safe in your online account.</p><button class="btn outline" data-act="acct-out-clear">Sign out and clear this device</button></section>
+    <section class="panel narrow"><h3>Delete my online data</h3><p class="muted">Removes everything saved online for this account: progress, bookmarks, classes and results. Data on this device stays. To delete the sign-in itself, email ${SUPPORT_EMAIL}.</p><button class="btn danger" data-act="acct-wipe">${icon("trash")} Delete my online data</button></section>`, { title: "My account", section: "settings" });
+  syncNow();
+}
+document.addEventListener("submit", async e => {
+  const f = e.target.closest("[data-cform]"); if (!f) return; e.preventDefault();
+  const fd = new FormData(f), kind = f.dataset.cform, err = $("#cError"), btn = $("button[type=submit]", f), say = m => { err.textContent = m; };
+  const email = String(fd.get("email") || "").trim(), password = String(fd.get("password") || ""), name = String(fd.get("name") || "").trim();
+  say("");
+  if (kind !== "newpass" && !/^\S+@\S+\.\S+$/.test(email)) return say("Enter a valid email address.");
+  if (password.length < 6) return say("Use a password of at least 6 characters.");
+  if (kind === "signup" && !name) return say("Enter your full name.");
+  btn.disabled = true;
+  try {
+    if (kind === "signup") {
+      const r = await cloudSignUp(email, password, name);
+      if (r === "confirm") { acctTab = "signin"; toast("Check your email and tap the link to confirm, then sign in."); return route(); }
+    } else if (kind === "signin") await cloudSignIn(email, password);
+    else {
+      await sb("/auth/v1/user", { method: "PUT", token: await cloudToken(), body: { password } }); toast("Password changed"); return go("#/account");
+    }
+    toast(kind === "signup" ? "Account created" : "Signed in");
+    await syncNow(); go(db.profile ? "#/account" : "#/register");
+  } catch (er) { say(er.message); } finally { btn.disabled = false; }
+});
+document.addEventListener("click", async e => {
+  const el = e.target.closest("[data-act]"); if (!el) return; const act = el.dataset.act;
+  if (act === "acct-tab") { acctTab = el.dataset.v; route(); }
+  else if (act === "acct-sync") { cloud.dirty = true; syncNow(); }
+  else if (act === "acct-out") { await cloudOutFlow(false); }
+  else if (act === "acct-out-clear") { if (confirm("Remove your data from this device and sign out? Make sure it has been saved online first.")) { cloud.dirty && navigator.onLine && await syncNow(); await cloudOutFlow(true); } }
+  else if (act === "acct-wipe") { if (confirm("Delete everything saved online for this account? This cannot be undone.")) { try { await sb(`/rest/v1/iphs_app_state?user_id=eq.${cloud.session.user.id}`, { method: "DELETE", token: await cloudToken() }); cloud.remoteTs = 0; cloud.dirty = true; csave(); toast("Online data deleted"); } catch (er) { toast(er.message); } } }
+  else if (act === "acct-forgot") {
+    const email = String($("#c-email").value || "").trim(), err = $("#cError");
+    if (!/^\S+@\S+\.\S+$/.test(email)) { err.textContent = "Type your email above first."; return $("#c-email").focus(); }
+    try { await cloudRecover(email); err.textContent = ""; toast("If that email has an account, a reset link is on its way."); } catch (er) { err.textContent = er.message; }
+  }
+});
+async function cloudOutFlow(clear) {
+  await cloudSignOut();
+  if (clear) { applying = true; db = defaults(); save(); applying = false; navRole = null; toast("Signed out. This device is cleared."); go("#/"); } else { toast("Signed out"); go("#/"); }
+  route();
+}
+async function handleAuthHash() {
+  const h = location.hash; if (!/^#(access_token|error)=/.test(h)) return false;
+  const q = new URLSearchParams(h.slice(1)); history.replaceState(null, "", location.pathname + location.search + "#/account");
+  if (q.get("error")) { toast(cloudError({ error_description: q.get("error_description") || "" }, 400)); return true; }
+  try {
+    const user = await sb("/auth/v1/user", { token: q.get("access_token") });
+    setSession({ access_token: q.get("access_token"), refresh_token: q.get("refresh_token"), expires_in: Number(q.get("expires_in")) || 3600, user });
+    if (q.get("type") === "recovery") { location.hash = "#/account/reset"; } else { toast("Email confirmed. You are signed in."); syncNow(); }
+  } catch (er) { toast(er.message); }
+  return true;
+}
+
 /* ---------- router ---------- */
 function route() {
   closeDrawer();
@@ -1426,6 +1652,7 @@ function route() {
       case "search": return viewSearch(b || "");
       case "progress": return viewProgress();
       case "settings": return viewSettings();
+      case "account": return viewAccount(b);
       case "results": return viewResults(parts.slice(1));
       case "about": return viewAbout();
       case "support": return viewSupport();
@@ -1461,6 +1688,8 @@ document.addEventListener("click", e => {
     db.guideView = el.dataset.v; save(); const w = $("#guideWrap");
     if (w) { $("#guide").innerHTML = guideHtml(w.dataset.level, Number(w.dataset.grade), db.guideView); $$(".subj-hint").forEach(p => { p.textContent = p.dataset[db.guideView] || ""; }); $$("[data-act=guide-view]", w).forEach(b => { const on = b.dataset.v === db.guideView; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); }); }
   } else if (act === "install") installApp();
+  else if (act === "ai-via" && isTeacher()) { db.settings.aiVia = el.dataset.v; db.settings.apiUrl = ""; db.settings.apiModel = ""; session.apiKey = ""; save(); viewSettings(); }
+  else if (act === "ai-test" && isTeacher()) testAi(el);
   else if (act === "install-dismiss") { barDismissed = true; try { sessionStorage.setItem("iphs.installBar", "1"); } catch { } refreshInstall(); }
   else if (act === "libview") { db.settings.libView = el.dataset.v; save(); route(); }
   else if (act === "tts-open") ttsOpen();
@@ -1489,7 +1718,11 @@ document.addEventListener("submit", e => {
   if (kind === "search") go(`#/search/${encodeURIComponent(String(fd.get("q") || "").trim())}`);
   else if (kind === "ask") { const t = $("#question"); const q = t.value; t.value = ""; ask(q); }
   else if (kind === "ai") {
-    db.settings.apiUrl = String(fd.get("url") || "").trim(); db.settings.apiModel = String(fd.get("model") || "").trim(); session.apiKey = String(fd.get("key") || "").trim(); save(); toast("AI settings saved");
+    if (!isTeacher()) return;
+    const key = String(fd.get("key") || "").trim();
+    db.settings.apiUrl = String(fd.get("url") || "").trim(); db.settings.apiModel = String(fd.get("model") || "").trim(); session.apiKey = key;
+    db.settings.proxyCode = aiVia() === "proxy" && fd.get("remember") ? key : "";
+    save(); toast("AI settings saved");
   } else if (kind === "register") {
     const name = String(fd.get("name") || "").trim(), age = Number(fd.get("age")), gender = fd.get("gender"), err = $("#formError");
     if (!name) { err.textContent = "Enter your full name."; return $("#f-name").focus(); }
@@ -1551,7 +1784,7 @@ function drawerHtml() {
   if (isTeacher()) {
     out += `<div class="dr-group"><h4>Teacher tools</h4>${link("/results", "All classes", "clip")}${db.classes.map(c => `<a class="sub" href="#/results/c/${c.id}"${on("/results/c/" + c.id)}><span>${esc(c.name)}</span><small>${c.learners.length}</small></a>`).join("")}${link("/results/new", "Add a class", "plus")}</div>`;
   }
-  out += `<div class="dr-group"><h4>Account</h4>${link("/profile", db.profile ? "My profile" : "Create profile", "users")}${link("/settings", "Settings", "gear")}</div><div class="dr-group"><h4>About</h4>${link("/about", "About the app", "book")}${link("/support", "Support and suggestions", "spark")}${link("/license", "Licence", "clip")}${link("/privacy", "Privacy", "lock")}</div>`;
+  out += `<div class="dr-group"><h4>Account</h4>${link("/profile", db.profile ? "My profile" : "Create profile", "users")}${CLOUD_ON ? link("/account", cloud.session ? "My account" : "Sign in", "users") : ""}${link("/settings", "Settings", "gear")}</div><div class="dr-group"><h4>About</h4>${link("/about", "About the app", "book")}${link("/support", "Support and suggestions", "spark")}${link("/license", "Licence", "clip")}${link("/privacy", "Privacy", "lock")}</div>`;
   return out;
 }
 function openDrawer() { $("#drawerNav").innerHTML = drawerHtml(); $("#drawer").hidden = false; $("#drawerScrim").hidden = false; $("#menuBtn").setAttribute("aria-expanded", "true"); document.body.classList.add("noscroll"); $("#drawerClose").focus(); }
@@ -1575,6 +1808,7 @@ fitScreen(); addEventListener("resize", fitScreen); addEventListener("orientatio
 
 /* ---------- start ---------- */
 buildNav(); applyTheme();
+if (CLOUD_ON) { handleAuthHash().then(() => { if (cloud.session) syncNow(); }); }
 $("#themeBtn").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
 addEventListener("hashchange", route);
 route();

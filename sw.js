@@ -1,5 +1,5 @@
 /* IPHS School Library service worker: lets the app open and work with no internet. */
-const CACHE = "iphs-library-v3";
+const CACHE = "iphs-library-v5";
 const CORE = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

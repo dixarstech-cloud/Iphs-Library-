@@ -88,3 +88,10 @@ Pages at `#/about`, `#/support`, `#/license` and `#/privacy`, linked from the me
 4. On Android Chrome a gold **Install** bar appears under the top bar. Tap Install to add the app to the home screen and app menu. On iPhone, open the link in Safari, tap Share, then Add to Home Screen.
 5. To publish an update, upload the new files. Raise the version in `sw.js` (`iphs-library-v3`, then v4 and so on) so phones refresh their saved copy.
 Installing needs https, which GitHub Pages provides. Opening the file directly from the phone's storage cannot be installed.
+
+## Gemini AI for teachers
+Teachers (role Teacher) can switch Ask Library AI to Online and use Google Gemini, either through the school proxy (`gemini-proxy.js`, a Cloudflare Worker that keeps the key secret, see `PROXY_SETUP.md`) or with their own key. Students always get offline answers from the books.
+
+
+## Online accounts (optional)
+See **SUPABASE_SETUP.md**. Users can sign in from Menu → Sign in to keep progress and results online, and approved teachers get Gemini.

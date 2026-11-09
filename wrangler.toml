@@ -1,0 +1,10 @@
+# Optional: only needed if you deploy with the wrangler command line tool.
+# The dashboard steps in PROXY_SETUP.md need no command line.
+name = "iphs-gemini-proxy"
+main = "gemini-proxy.js"
+compatibility_date = "2025-01-01"
+
+[vars]
+ALLOWED_ORIGINS = "https://YOUR-NAME.github.io"
+
+# Secrets are added with:  wrangler secret put GEMINI_API_KEY   and   wrangler secret put TEACHER_CODES

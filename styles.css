@@ -643,3 +643,7 @@ img,svg,video,canvas,table{max-width:100%}
 .install-bar .btn{flex:none}
 .btn.gold{background:var(--gold);color:#1b1b1b;border-color:var(--gold)}
 @media print{.install-bar{display:none!important}}
+.field-label{font-weight:700;margin:14px 0 6px}
+
+.kv{display:grid;gap:10px;margin:0 0 14px}.kv div{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);padding-bottom:8px}.kv dt{color:var(--muted);font-weight:600}.kv dd{margin:0;text-align:right;overflow-wrap:anywhere}
+.narrow+.narrow{margin-top:16px}
