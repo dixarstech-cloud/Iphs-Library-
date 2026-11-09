@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "IPHS School Library",
+  "short_name": "IPHS Library",
+  "description": "Read school books, practise with quizzes and ask questions, even without internet.",
+  "start_url": "./index.html?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "prefer_related_applications": false,
+  "orientation": "any",
+  "background_color": "#12264a",
+  "theme_color": "#12264a",
+  "lang": "en",
+  "author": "Dixars",
+  "categories": ["education", "books"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Library", "url": "./index.html#/library", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Ask Library AI", "url": "./index.html#/ask", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "My progress", "url": "./index.html#/progress", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
+  <meta name="theme-color" content="#12264a">
+  <meta name="author" content="Dixars">
+  <meta name="description" content="IPHS School Library: read school books, practise with quizzes and ask questions, even without internet.">
+  <title>IPHS School Library</title>
+  <link rel="icon" href="logo.png" type="image/png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="IPHS Library">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bitter:wght@500;600;700;800&display=swap">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip" href="#view">Skip to content</a>
+  <header class="topbar">
+    <button class="icon-btn on-dark" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="drawer"></button>
+    <a class="brand" href="#/" aria-label="IPHS School Library home">
+      <img src="logo.png" alt="" width="34" height="40">
+      <span class="brand-name"><b>IPHS</b> <span class="bn-rest">School Library</span></span>
+    </a>
+    <nav class="nav" id="nav" aria-label="Main"></nav>
+    <div class="top-actions">
+      <button class="icon-btn on-dark" id="themeBtn" type="button" aria-label="Switch theme"></button>
+      <div id="account"></div>
+    </div>
+  </header>
+  <div class="install-bar" id="installBar" hidden></div>
+  <div class="drawer-scrim" id="drawerScrim" hidden></div>
+  <aside class="drawer" id="drawer" aria-label="Menu" hidden>
+    <div class="drawer-head"><strong>Menu</strong><button class="icon-btn" id="drawerClose" type="button" aria-label="Close menu"></button></div>
+    <nav id="drawerNav" aria-label="Site menu"></nav>
+  </aside>
+  <div id="readbar" aria-hidden="true"></div>
+
+  <main id="view" tabindex="-1">
+    <noscript><div class="wrap"><p>IPHS School Library needs JavaScript. Please turn it on in your browser and reload this page.</p></div></noscript>
+  </main>
+
+  <footer class="footer">
+    <img src="logo.png" alt="" width="22" height="26">
+    <span>IPHS School Library. Learn, explore and grow.</span>
+    <span class="footer-dev">Developed by <strong>Dixars</strong></span>
+    <nav class="footer-links" aria-label="About and legal"><a href="#/about">About</a><a href="#/support">Support</a><a href="#/license">Licence</a><a href="#/privacy">Privacy</a></nav>
+  </footer>
+  <nav class="bottomnav" id="bottomnav" aria-label="Main (mobile)"></nav>
+  <div class="sheet" id="dictSheet" role="dialog" aria-modal="true" aria-label="Dictionary" hidden><div class="sheet-card"><button class="icon-btn sheet-close" id="dictClose" type="button" data-act="dict-close" aria-label="Close dictionary"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button><div id="dictSheetBody"></div></div></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script src="data.js"></script>
+  <script src="guide.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
