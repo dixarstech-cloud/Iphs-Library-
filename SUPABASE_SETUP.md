@@ -53,6 +53,8 @@ create trigger iphs_on_signup after insert on auth.users for each row execute fu
 Authentication → **Sign In / Providers → Email**: keep it on. Turn **Confirm email** off for simplest sign-up, or leave it on and learners must tap the link in their email first.
 Authentication → **URL Configuration**: set **Site URL** to your GitHub Pages address (for example `https://yourname.github.io/iphs/`) and add the same address under Redirect URLs. Password-reset and confirmation links use it.
 
+**If the confirmation email opens a GitHub "404" page:** the Site URL still points to the root of your GitHub address. Set it to the full app address, including the repository folder (for example `https://yourname.github.io/iphs/`), and add the same address under Redirect URLs. Old emails keep the old link, so ask for a new one. The simplest option for a school is to turn **Confirm email** off.
+
 ## 3. Approve teachers for Gemini
 Anyone can create an account, so Gemini is switched on only for accounts you approve. In **Table Editor → iphs_profiles**, tick **is_teacher** for the teacher's row (or run `update public.iphs_profiles set is_teacher = true where id = '...';`). The teacher opens My account once and Gemini appears in Settings.
 Also set the same teacher access code check in your Gemini proxy (see PROXY_SETUP.md).

@@ -668,6 +668,28 @@ img,svg,video,canvas,table{max-width:100%}
 .kv{display:grid;gap:10px;margin:0 0 14px}.kv div{display:flex;justify-content:space-between;gap:14px;border-bottom:1px solid var(--line);padding-bottom:8px}.kv dt{color:var(--muted);font-weight:600}.kv dd{margin:0;text-align:right;overflow-wrap:anywhere}
 .narrow+.narrow{margin-top:16px}
 
+.field input[type=email]{width:100%;min-height:48px;padding:10px 14px;border:2px solid var(--line);border-radius:var(--r-sm);background:var(--surface);outline:0}
+#welcome{position:fixed;inset:0;z-index:200;background:var(--bg);display:flex;flex-direction:column;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-top:env(safe-area-inset-top)}
+.w-top{display:flex;justify-content:space-between;align-items:center;padding:14px 18px}
+.w-brand{font-family:var(--font-head);font-weight:600;color:#fff}.w-brand b{color:var(--gold)}
+.w-top .w-brand{color:var(--text)}.w-top .w-brand b{color:var(--green)}
+.w-skip,.w-link{background:none;border:0;color:var(--link);font-weight:700;min-height:44px;padding:8px 12px;text-decoration:underline}
+.w-art{flex:1 1 auto;min-height:200px;display:flex;align-items:center;justify-content:center;margin:0 18px;border-radius:var(--r-lg);background:linear-gradient(160deg,var(--navy) 0,var(--navy-deep) 100%);position:relative;overflow:hidden}
+.w-art::before{content:"";position:absolute;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(227,167,47,.35),transparent 65%);top:-80px;right:-60px}
+.w-art svg{width:min(94%,420px);height:auto;max-height:100%;position:relative}
+.w-card{padding:20px 22px calc(22px + env(safe-area-inset-bottom));max-width:560px;width:100%;margin:0 auto}
+.w-dots{display:flex;gap:8px;justify-content:center;margin-bottom:14px}.w-dots i{width:9px;height:9px;border-radius:9px;background:var(--line);transition:width .2s}.w-dots i.on{width:28px;background:var(--gold)}
+.w-h{font-size:clamp(25px,7vw,32px);text-align:center}.w-p{text-align:center;color:var(--muted);margin-top:10px}
+.w-count{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+.w-btns{display:flex;gap:12px;margin-top:22px}.w-btns .btn{flex:1}
+.w-hero{background:linear-gradient(160deg,var(--navy) 0,var(--navy-deep) 100%);padding:calc(18px + env(safe-area-inset-top)) 22px 0;position:relative;margin-top:calc(-1*env(safe-area-inset-top));flex:none}
+.w-hero .w-brand{display:block;font-size:20px;padding-bottom:22px}
+.w-hero svg{display:block;width:100%;height:62px;margin-bottom:-1px}
+.w-auth{padding:6px 22px calc(26px + env(safe-area-inset-bottom));max-width:480px;width:100%;margin:0 auto}
+.w-auth .seg{display:flex;width:100%;margin-top:18px}.w-auth .seg button{flex:1;justify-content:center}
+.w-auth .w-main{width:100%;margin-top:6px}.w-auth .w-link{display:block;margin:4px auto 0}
+.w-auth .form-error:empty{display:none}
+
 </style>
 </head>
 <body>
@@ -5883,7 +5905,7 @@ async function cloudToken() {
   return cloud.session.access_token;
 }
 async function cloudSignUp(email, password, name) {
-  const r = await sb("/auth/v1/signup", { method: "POST", body: { email, password, data: { full_name: name } } });
+  const r = await sb(`/auth/v1/signup?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`, { method: "POST", body: { email, password, data: { full_name: name } } });
   if (r && r.access_token) { setSession(r); return "in"; } return "confirm";
 }
 async function cloudSignIn(email, password) { setSession(await sb("/auth/v1/token?grant_type=password", { method: "POST", body: { email, password } })); }
@@ -5986,13 +6008,14 @@ document.addEventListener("submit", async e => {
   try {
     if (kind === "signup") {
       const r = await cloudSignUp(email, password, name);
-      if (r === "confirm") { acctTab = "signin"; toast("Check your email and tap the link to confirm, then sign in."); return route(); }
+      if (r === "confirm") { acctTab = "signin"; wTab = "signin"; wMsg = "Check your email and tap the link to confirm. Then sign in here."; toast("Check your email to confirm your account."); return $("#welcome") ? wDraw() : route(); }
     } else if (kind === "signin") await cloudSignIn(email, password);
     else {
       await sb("/auth/v1/user", { method: "PUT", token: await cloudToken(), body: { password } }); toast("Password changed"); return go("#/account");
     }
     toast(kind === "signup" ? "Account created" : "Signed in");
-    await syncNow(); go(db.profile ? "#/account" : "#/register");
+    const fromWelcome = !!$("#welcome"); if (fromWelcome) { wClose(); wst.guest = false; wsave(); }
+    await syncNow(); go(db.profile ? (fromWelcome ? "#/" : "#/account") : "#/register"); if (fromWelcome) route();
   } catch (er) { say(er.message); } finally { btn.disabled = false; }
 });
 document.addEventListener("click", async e => {
@@ -6024,6 +6047,70 @@ async function handleAuthHash() {
   } catch (er) { toast(er.message); }
   return true;
 }
+
+/* ---------- first-run tour and sign-in screen ---------- */
+const WKEY = "iphs.welcome.v1";
+const wst = (() => { try { return JSON.parse(localStorage.getItem(WKEY)) || {}; } catch { return {}; } })();
+const wsave = () => { try { localStorage.setItem(WKEY, JSON.stringify(wst)); } catch { } };
+const ART = [
+  `<svg viewBox="0 0 240 170" role="img" aria-label="Books on a shelf"><rect x="14" y="128" width="212" height="14" rx="3" fill="#a96a2f"/><rect x="14" y="140" width="212" height="6" rx="3" fill="#7d4d20"/><rect x="30" y="58" width="26" height="70" rx="3" fill="#1f5c3b"/><rect x="36" y="70" width="14" height="4" fill="#e3a72f"/><rect x="58" y="42" width="24" height="86" rx="3" fill="#e3a72f"/><rect x="63" y="56" width="14" height="4" fill="#12264a"/><rect x="84" y="66" width="28" height="62" rx="3" fill="#2f6fdc"/><rect x="90" y="78" width="16" height="4" fill="#fff"/><g transform="rotate(14 130 128)"><rect x="118" y="50" width="24" height="78" rx="3" fill="#a3283a"/><rect x="123" y="64" width="14" height="4" fill="#fff"/></g><rect x="156" y="52" width="26" height="76" rx="3" fill="#12264a"/><rect x="162" y="66" width="14" height="4" fill="#e3a72f"/><rect x="184" y="72" width="26" height="56" rx="3" fill="#5cc08c"/><path d="M120 28l5 10 11 1-8 8 2 11-10-6-10 6 2-11-8-8 11-1z" fill="#e3a72f"/></svg>`,
+  `<svg viewBox="0 0 240 170" role="img" aria-label="Book that reads aloud"><path d="M40 52c26-8 52-6 80 8v82c-28-14-54-16-80-8z" fill="#fff" stroke="#12264a" stroke-width="4" stroke-linejoin="round"/><path d="M200 52c-26-8-52-6-80 8v82c28-14 54-16 80-8z" fill="#f1f5f2" stroke="#12264a" stroke-width="4" stroke-linejoin="round"/><g stroke="#1f5c3b" stroke-width="4" stroke-linecap="round"><path d="M58 76h42M58 92h42M58 108h30"/></g><g stroke="#8a98ad" stroke-width="4" stroke-linecap="round"><path d="M140 76h42M140 92h42M140 108h30"/></g><g fill="none" stroke="#e3a72f" stroke-width="6" stroke-linecap="round"><path d="M150 24c10 8 10 22 0 30"/><path d="M164 14c18 14 18 36 0 50"/></g><circle cx="132" cy="39" r="9" fill="#e3a72f"/><text x="44" y="44" font-family="Georgia,serif" font-size="22" font-weight="700" fill="#12264a">Aa</text></svg>`,
+  `<svg viewBox="0 0 240 170" role="img" aria-label="Quiz scores growing"><rect x="22" y="104" width="30" height="40" rx="4" fill="#5cc08c"/><rect x="62" y="82" width="30" height="62" rx="4" fill="#2f9a63"/><rect x="102" y="58" width="30" height="86" rx="4" fill="#1f5c3b"/><rect x="142" y="36" width="30" height="108" rx="4" fill="#12264a"/><path d="M16 144h168" stroke="#566478" stroke-width="3" stroke-linecap="round"/><path d="M157 12l5 10 11 1-8 8 2 11-10-6-10 6 2-11-8-8 11-1z" fill="#e3a72f"/><rect x="156" y="84" width="72" height="50" rx="12" fill="#e3a72f"/><path d="M168 134l-6 18 20-14z" fill="#e3a72f"/><text x="192" y="118" text-anchor="middle" font-family="Georgia,serif" font-size="32" font-weight="700" fill="#12264a">?</text></svg>`,
+  `<svg viewBox="0 0 240 170" role="img" aria-label="Class results report"><rect x="50" y="14" width="140" height="146" rx="10" fill="#fff" stroke="#12264a" stroke-width="4"/><rect x="92" y="6" width="56" height="20" rx="6" fill="#12264a"/><g font-family="system-ui,sans-serif" font-size="12" font-weight="700"><rect x="64" y="40" width="112" height="22" rx="5" fill="#e1f3e8"/><circle cx="78" cy="51" r="8" fill="#e3a72f"/><text x="78" y="55" text-anchor="middle" fill="#12264a">1</text><rect x="92" y="47" width="48" height="8" rx="4" fill="#1f5c3b"/><text x="164" y="55" text-anchor="end" fill="#1f5c3b">A</text><rect x="64" y="68" width="112" height="22" rx="5" fill="#f1f5f2"/><circle cx="78" cy="79" r="8" fill="#c5cfdb"/><text x="78" y="83" text-anchor="middle" fill="#12264a">2</text><rect x="92" y="75" width="38" height="8" rx="4" fill="#2f9a63"/><text x="164" y="83" text-anchor="end" fill="#2f9a63">B</text><rect x="64" y="96" width="112" height="22" rx="5" fill="#f1f5f2"/><circle cx="78" cy="107" r="8" fill="#d9a066"/><text x="78" y="111" text-anchor="middle" fill="#12264a">3</text><rect x="92" y="103" width="28" height="8" rx="4" fill="#5cc08c"/><text x="164" y="111" text-anchor="end" fill="#566478">C</text></g><rect x="64" y="128" width="112" height="22" rx="11" fill="#a3283a"/><text x="120" y="143" text-anchor="middle" font-family="system-ui,sans-serif" font-size="12" font-weight="800" fill="#fff">PDF report</text></svg>`
+];
+const SLIDES = [
+  ["Your school library, in your pocket", "Read the books for every class, even when there is no internet."],
+  ["Listen and look up words", "Tap read aloud to hear a chapter. Tap any word to see what it means."],
+  ["Ask, practise and see progress", "Ask the library a question, take quizzes and watch your scores grow."],
+  ["Built for teachers too", "Enrol learners, enter marks, see class positions and print PDF reports that say what each learner should focus on."]
+];
+let wStep = 0, wTab = "signin", wMsg = "";
+function wClose() { const w = $("#welcome"); if (w) w.remove(); document.body.classList.remove("noscroll"); }
+function wDraw() {
+  let w = $("#welcome"); if (!w) { w = document.createElement("div"); w.id = "welcome"; w.setAttribute("role", "dialog"); w.setAttribute("aria-modal", "true"); w.setAttribute("aria-label", "Welcome"); document.body.appendChild(w); document.body.classList.add("noscroll"); }
+  if (wStep < SLIDES.length) {
+    const [t, d] = SLIDES[wStep], last = wStep === SLIDES.length - 1;
+    w.innerHTML = `<div class="w-top"><span class="w-brand"><b>IPHS</b> School Library</span><button class="w-skip" data-w="skip-tour">Skip</button></div>
+      <div class="w-art" data-w="swipe">${ART[wStep]}</div>
+      <div class="w-card"><div class="w-dots" aria-hidden="true">${SLIDES.map((_, i) => `<i class="${i === wStep ? "on" : ""}"></i>`).join("")}</div>
+      <h1 class="w-h">${t}</h1><p class="w-p">${d}</p><p class="w-count">Screen ${wStep + 1} of ${SLIDES.length}</p>
+      <div class="w-btns">${wStep ? `<button class="btn outline" data-w="back">Back</button>` : ""}<button class="btn w-main" data-w="next">${last ? (CLOUD_ON ? "Continue" : "Start reading") : "Next"}</button></div></div>`;
+  } else {
+    const up = wTab === "signup";
+    w.innerHTML = `<div class="w-hero"><span class="w-brand"><b>IPHS</b> School Library</span><svg viewBox="0 0 240 70" aria-hidden="true"><path d="M0 40c40-26 80 22 120-2s80-20 120 4v28H0z" fill="var(--bg)"/><circle cx="196" cy="22" r="9" fill="#e3a72f"/></svg></div>
+      <form class="w-auth" data-cform="${up ? "signup" : "signin"}" novalidate>
+        <h1 class="w-h">${up ? "Create your account" : "Welcome back"}</h1>
+        <p class="w-p">${up ? "Save your progress online and use it on any phone." : "Sign in to open your progress. Teachers get results, classes and reports."}</p>
+        <div class="seg" role="group" aria-label="Account"><button type="button" class="${!up ? "on" : ""}" data-w="tab" data-v="signin" aria-pressed="${!up}">Sign in</button><button type="button" class="${up ? "on" : ""}" data-w="tab" data-v="signup" aria-pressed="${up}">Create account</button></div>
+        ${up ? `<div class="field"><label for="c-name">Full name</label><input id="c-name" name="name" autocomplete="name" required></div>` : ""}
+        <div class="field"><label for="c-email">Email address</label><input id="c-email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" placeholder="name@example.com" required></div>
+        <div class="field"><label for="c-pass">Password</label><input id="c-pass" name="password" type="password" autocomplete="${up ? "new-password" : "current-password"}" minlength="6" placeholder="At least 6 characters" required></div>
+        <p class="form-error" role="alert" id="cError">${esc(wMsg)}</p>
+        <button class="btn w-main" type="submit">${up ? "Create account" : "Sign in"}</button>
+        ${up ? "" : `<button class="w-link" type="button" data-act="acct-forgot">Forgot password?</button>`}
+        <button class="w-link" type="button" data-w="guest">Continue without an account</button>
+      </form>`;
+    wMsg = "";
+  }
+}
+function maybeWelcome() {
+  if (location.hash.startsWith("#/account/reset")) return;
+  const needTour = !wst.tour, needAuth = CLOUD_ON && !cloud.session && !wst.guest;
+  if (!needTour && !needAuth) return;
+  wStep = needTour ? 0 : SLIDES.length; wDraw();
+}
+function wFinishTour() { wst.tour = true; wsave(); if (CLOUD_ON && !cloud.session && !wst.guest) { wStep = SLIDES.length; wDraw(); } else wClose(); }
+document.addEventListener("click", e => {
+  const b = e.target.closest("[data-w]"); if (!b || !$("#welcome")) return; const a = b.dataset.w;
+  if (a === "next") { wStep < SLIDES.length - 1 ? (wStep++, wDraw()) : wFinishTour(); }
+  else if (a === "back") { wStep--; wDraw(); }
+  else if (a === "skip-tour") wFinishTour();
+  else if (a === "tab") { wTab = b.dataset.v; wDraw(); }
+  else if (a === "guest") { wst.guest = true; wsave(); wClose(); }
+});
+(() => { let x0 = null; const w = () => $("#welcome");
+  document.addEventListener("touchstart", e => { x0 = w() && wStep < SLIDES.length ? e.touches[0].clientX : null; }, { passive: true });
+  document.addEventListener("touchend", e => { if (x0 === null) return; const dx = e.changedTouches[0].clientX - x0; x0 = null; if (Math.abs(dx) < 60) return; if (dx < 0) { wStep < SLIDES.length - 1 ? (wStep++, wDraw()) : wFinishTour(); } else if (wStep > 0) { wStep--; wDraw(); } }, { passive: true }); })();
 
 /* ---------- router ---------- */
 function route() {
@@ -6199,7 +6286,7 @@ fitScreen(); addEventListener("resize", fitScreen); addEventListener("orientatio
 
 /* ---------- start ---------- */
 buildNav(); applyTheme();
-if (CLOUD_ON) { handleAuthHash().then(() => { if (cloud.session) syncNow(); }); }
+(CLOUD_ON ? handleAuthHash() : Promise.resolve(false)).then(() => { if (cloud.session) { syncNow(); wClose(); } maybeWelcome(); });
 $("#themeBtn").addEventListener("click", () => setTheme(currentTheme() === "dark" ? "light" : "dark"));
 addEventListener("hashchange", route);
 route();
